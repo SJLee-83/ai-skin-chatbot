@@ -1,50 +1,79 @@
-# 🤖 AI 스킨케어 어드바이저 챗봇
+# AI-SkinView 스킨케어 추천 챗봇
 
-**[프로젝트 목표]** 사용자의 피부 데이터(설문, 사진 분석)를 기반으로 개인 맞춤형 스킨케어 솔루션을 제공하는 AI 챗봇 애플리케이션입니다.
+사용자의 피부 데이터(바우만 피부타입 설문 + 안면 분석 수치)를 바탕으로 맞춤 스킨케어 제품을 추천하는 대화형 챗봇입니다. FastAPI 백엔드와 React Native(Expo) 모바일 앱으로 구성됩니다.
 
-**[Live Demo Link]** - [🎥 YouTube 전체 데모 영상 보기 (59초)](https://youtube.com/shorts/Shnw9ZDk6kM?feature=share)
+> 팀 프로젝트 **AI-SkinView**(피부 분석 모바일 앱)에서 제가 단독으로 담당한 **AI 챗봇 모듈**을 별도 저장소로 분리하고, 모놀리식 구조를 레이어드 아키텍처로 리팩터링한 결과물입니다.
+> 팀 전체 저장소: [skinview-team-project](https://github.com/SJLee-83/skinview-team-project)
 
----
+데모 영상: [YouTube (59초)](https://youtube.com/shorts/Shnw9ZDk6kM?feature=share)
 
-## 📸 데모 영상 및 스크린샷
+## 데모
 
-| 데모 GIF (자동 재생) | 사용자 맞춤 예상 질문 | 지능형 제품 추천 | 상세 설명 및 프리셋 저장 |
+| 데모 | 추천 질문 자동 생성 | 제품 추천 | 사용법·프리셋 저장 |
 | :---: | :---: | :---: | :---: |
-| ![앱 데모 GIF](docs/images/demo.gif) | ![사용자 맞춤 예상 질문](docs/images/screenshot-questions.png) | ![지능형 제품 추천](docs/images/screenshot-recommend.png) | ![상세 설명 및 프리셋 저장](docs/images/screenshot-preset.png) |
----
+| ![데모](docs/images/demo.gif) | ![추천 질문](docs/images/screenshot-questions.png) | ![제품 추천](docs/images/screenshot-recommend.png) | ![프리셋 저장](docs/images/screenshot-preset.png) |
 
-## ✨ 주요 기능
+## 동작 방식
 
-- **👤 개인화된 추천 질문:** 사용자 데이터 분석을 통해 가장 궁금해할 만한 질문을 자동으로 생성하여 제안합니다.
-- **🧴 지능형 제품 추천:** 사용자의 질문 의도를 파악하여, 수많은 제품 중 가장 적합한 제품을 RAG(검색 증강 생성) 기술을 활용해 추천합니다.
-- **💬 동적 대화 시스템:** 상태(State) 기반으로 대화의 흐름을 관리하여, 단순 문답을 넘어 제품 상세 설명, 프리셋 저장 등 다단계의 상호작용이 가능합니다.
-- **🔄 대화 기록 관리:** 이전 대화 내용을 기억하고 이어갈 수 있으며, 언제든지 대화 기록을 초기화할 수 있습니다.
-- **🎨 직관적인 UI/UX:** 타이핑 애니메이션, 빠른 응답 버튼 등을 통해 사용자가 실제 대화처럼 느낄 수 있는 몰입감 있는 채팅 환경을 제공합니다.
+상태 기반 다단계 대화로 동작합니다.
 
----
+1. **추천 질문 생성** — 사용자의 피부 데이터를 바탕으로 물어볼 만한 질문을 자동 생성해 버튼으로 제시합니다.
+2. **의도 분류** — 입력을 "제품 추천 / 단순 대화"로 분류합니다(gpt-4o-mini, 실패 시 기본값 폴백).
+3. **RAG 제품 추천** — 피부 데이터와 질문을 임베딩한 뒤 pgvector 코사인 거리(`<=>`)로 제품 3종을 검색하고, LLM이 추천 소개글과 버튼 텍스트를 생성합니다.
+4. **사용법 안내·프리셋 저장** — 선택한 제품의 사용법을 생성하고 프리셋으로 저장합니다.
 
-## 🏗️ 시스템 아키텍처
+대화 상태(`initial_message → product_recommendation → product_usage`)와 대화 기록은 Redis 세션(TTL 300초)에 보관합니다.
 
-이 프로젝트는 최신 기술 스택을 활용하여 프론트엔드와 백엔드가 명확하게 분리된 MSA(마이크로서비스 아키텍처) 구조로 설계되었습니다.
+## 아키텍처
 
-![시스템 아키텍처 다이어그램](docs/images/architecture.png)
+프론트엔드(React Native)와 백엔드(FastAPI)를 분리한 클라이언트–서버 구조입니다. 백엔드는 컨트롤러 → 서비스 → 리포지토리 / 캐시 계층으로 나누고, FastAPI `lifespan`에서 DB·Redis·Azure OpenAI 클라이언트를 조립해 서비스에 의존성을 주입합니다.
 
----
+![아키텍처](docs/images/architecture.png)
 
-## 🛠️ 기술 스택
+```
+skinview-chat-backend/
+  main.py                  # FastAPI 앱 + lifespan 의존성 조립
+  app/
+    api/                   # 컨트롤러 (라우팅)
+    services/              # chat_service(대화 상태 머신), openai_service
+    repositories/          # DB 접근 (사용자·제품·프리셋, pgvector 검색)
+    caching/               # Redis 세션 캐시
+    core/                  # 작업별 프롬프트
+skinview-chat-frontend/    # React Native (Expo) 채팅 앱
+```
 
-### Backend
-- **Python 3.11+**
-- **FastAPI**: 현대적이고 빠른 Python 웹 프레임워크
-- **Uvicorn**: ASGI 서버
-- **PostgreSQL**: 주 데이터베이스
-- **Psycopg2**: Python PostgreSQL 어댑터
-- **Redis**: 채팅 세션 관리를 위한 인메모리 캐시
-- **Azure OpenAI Service (gpt-4o-mini)**: 핵심 AI 추론 및 임베딩 모델
-- **python-dotenv**: 환경 변수 관리
+## 기술 스택
 
-### Frontend
-- **React Native (Expo)**: 크로스 플랫폼 모바일 앱 개발 프레임워크
-- **JavaScript (ES6+)**
-- **Axios**: HTTP 통신 라이브러리
-- **React Navigation**: 화면 전환 및 라우팅
+**Backend** — Python 3.11+, FastAPI, Uvicorn, PostgreSQL + pgvector, psycopg2, Redis, Azure OpenAI(gpt-4o-mini · 임베딩 모델), python-dotenv
+
+**Frontend** — React Native (Expo SDK 53), Axios, React Navigation, react-native-markdown-display
+
+## 실행 방법
+
+### 사전 요구사항
+- Python 3.11+, Node.js 18+
+- PostgreSQL (pgvector 확장 + 제품 임베딩 데이터 적재 필요)
+- Redis
+- Azure OpenAI 리소스 (chat·embedding 배포)
+
+### 백엔드
+```bash
+cd skinview-chat-backend
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env               # .env에 Azure / DB / Redis 값 입력
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+### 프론트엔드
+```bash
+cd skinview-chat-frontend
+npm install
+cp .env.example .env               # EXPO_PUBLIC_API_URL에 백엔드 주소 입력
+npx expo start
+```
+
+## 참고
+- 측정된 정량 성과(추천 정확도 등)는 없으며, 동작은 데모 영상으로 확인할 수 있습니다.
+- 제품 임베딩 데이터와 DB 스키마는 저장소에 포함되어 있지 않습니다.

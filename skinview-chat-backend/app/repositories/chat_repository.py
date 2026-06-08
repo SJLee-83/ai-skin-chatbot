@@ -13,7 +13,7 @@ class ChatRepository:
         logger.info("ChatRepository initialized")
 
     # 특정 피부 타입의 모든 상세 정보를 DB에서 호출
-    def _get_skin_type_details(self, skin_type: str) -> str:
+    def get_skin_type_details(self, skin_type: str) -> str:
         if not skin_type:
             return ""
         logger.info(f"Getting skin type details for: {skin_type}")
@@ -105,14 +105,16 @@ class ChatRepository:
     # 코사인 거리 계산으로 맞춤 제품 검색
     def search_products_by_embedding(self, embedding_vector: list, limit: int) -> list[dict]:
         logger.info(f"Searching for {limit} products by embedding vector.")
-        vector_sql = "ARRAY[%s]::vector" % ','.join(map(str, embedding_vector))
+        # embedding_vector(임베딩 API가 만든 float 리스트)는 사용자 입력이 아닌 내부 생성값이라
+        # pgvector 리터럴로 직접 구성한다. limit은 파라미터 바인딩으로 전달.
+        vector_literal = "ARRAY[{}]::vector".format(",".join(map(str, embedding_vector)))
         with self.db_conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             search_sql = f"""
             SELECT product_name, product_type, product_ingredients, product_description
             FROM products_tbl
-            ORDER BY product_embedding <=> {vector_sql} LIMIT {limit};
+            ORDER BY product_embedding <=> {vector_literal} LIMIT %s;
             """
-            cur.execute(search_sql)
+            cur.execute(search_sql, (limit,))
             results = cur.fetchall()
             logger.info(f"Found {len(results)} similar products from DB.")
             return [dict(row) for row in results]
