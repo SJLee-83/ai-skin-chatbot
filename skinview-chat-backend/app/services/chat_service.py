@@ -127,7 +127,11 @@ class ChatService:
             ai_response, button_texts = self.openai_service.get_recommendation_response(user_info_str, chat_history_str, retrieved_products, received_text)
             
             chat_history.append({"role": "assistant", "content": ai_response, "time": now_time_str, "quickReplies": button_texts})
-            
+
+            # handle_message()가 button_text로 선택 제품을 찾아 상태를 전이시키므로, 세션에 저장하기 전에 붙여야 한다.
+            for product, button_text in zip(retrieved_products, button_texts):
+                product["button_text"] = button_text
+
             new_context = {"recommended_products": retrieved_products}
             session_data.update({"state": "initial_message", "chat_history": chat_history, "context": new_context})
             
